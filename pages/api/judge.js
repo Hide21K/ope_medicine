@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     const difyRes = await fetch('https://api.dify.ai/v1/workflows/run', {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer app-MnEVwj0pyub6frKBkG6IfLf3',
+        'Authorization': `Bearer ${process.env.DIFY_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
