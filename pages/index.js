@@ -6,15 +6,6 @@ export default function Home() {
     console.log('現在のURL:', window.location.href);
     console.log('現在のホスト名:', window.location.hostname);
     
-    // JSZipを動的にインポート
-    let JSZip;
-    import('jszip').then(module => {
-      JSZip = module.default;
-      console.log('JSZip loaded successfully');
-    }).catch(err => {
-      console.error('JSZip load failed:', err);
-    });
-    
     // Dify API設定
     const DIFY_CONFIG = {
       url: '/api/judge',
@@ -238,172 +229,80 @@ export default function Home() {
         return;
       }
       
-      if (!JSZip) {
-        alert('JSZipライブラリが読み込まれていません。しばらく待ってから再試行してください。');
-        return;
-      }
-      
       const surgeryDate = elements.surgeryDateInput.value;
       const currentDate = new Date().toLocaleDateString('ja-JP');
       
-      try {
-        // 手術日を日本語形式に変換
-        const surgeryDateObj = new Date(surgeryDate);
-        const formattedSurgeryDate = `${surgeryDateObj.getFullYear()}年${surgeryDateObj.getMonth() + 1}月${surgeryDateObj.getDate()}日`;
-        
-        // DOCX形式のXMLコンテンツを作成
-        let documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>
-    <w:p>
-      <w:r>
-        <w:t>様の手術前の薬物中止について</w:t>
-      </w:r>
-    </w:p>
-    <w:p>
-      <w:r>
-        <w:t>手術予定日: ${formattedSurgeryDate}</w:t>
-      </w:r>
-    </w:p>
-    <w:p>
-      <w:r>
-        <w:t>術前に休薬が必要な薬剤と休薬開始日</w:t>
-      </w:r>
-    </w:p>`;
+      // 手術日を日本語形式に変換
+      const surgeryDateObj = new Date(surgeryDate);
+      const formattedSurgeryDate = `${surgeryDateObj.getFullYear()}年${surgeryDateObj.getMonth() + 1}月${surgeryDateObj.getDate()}日`;
+      
+      // シンプルなDOCX形式のコンテンツを作成
+      let docContent = `様の手術前の薬物中止について
 
-        window.currentResults.forEach((result, index) => {
-          const resultText = result.text || result.error || '結果が取得できませんでした';
-          
-          // 結果テキストから必要な情報を抽出
-          let drugName = result.drug;
-          let stopDate = '';
-          let reason = '';
-          
-          // 結果テキストを解析して情報を抽出
-          const lines = resultText.split('\n');
-          lines.forEach(line => {
-            if (line.includes('休薬開始日:')) {
-              const dateMatch = line.match(/休薬開始日:\s*(\d{4}-\d{2}-\d{2})/);
-              if (dateMatch) {
-                const dateObj = new Date(dateMatch[1]);
-                stopDate = `${dateObj.getFullYear()}年${dateObj.getMonth() + 1}月${dateObj.getDate()}日`;
-              }
+手術予定日: ${formattedSurgeryDate}
+
+術前に休薬が必要な薬剤と休薬開始日
+
+`;
+
+      window.currentResults.forEach((result, index) => {
+        const resultText = result.text || result.error || '結果が取得できませんでした';
+        
+        // 結果テキストから必要な情報を抽出
+        let drugName = result.drug;
+        let stopDate = '';
+        let reason = '';
+        
+        // 結果テキストを解析して情報を抽出
+        const lines = resultText.split('\n');
+        lines.forEach(line => {
+          if (line.includes('休薬開始日:')) {
+            const dateMatch = line.match(/休薬開始日:\s*(\d{4}-\d{2}-\d{2})/);
+            if (dateMatch) {
+              const dateObj = new Date(dateMatch[1]);
+              stopDate = `${dateObj.getFullYear()}年${dateObj.getMonth() + 1}月${dateObj.getDate()}日`;
             }
-            if (line.includes('休薬理由:')) {
-              reason = line.split('休薬理由:')[1]?.trim() || '';
-            }
-          });
-          
-          // XMLエスケープ処理
-          const escapedDrugName = drugName
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&apos;');
-          
-          const escapedStopDate = stopDate
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&apos;');
-          
-          const escapedReason = reason
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&apos;');
-          
-          documentXml += `
-    <w:p>
-      <w:r>
-        <w:t>${index + 1}. 薬剤名: ${escapedDrugName}</w:t>
-      </w:r>
-    </w:p>
-    <w:p>
-      <w:r>
-        <w:t>　休薬開始日: ${escapedStopDate}</w:t>
-      </w:r>
-    </w:p>
-    <w:p>
-      <w:r>
-        <w:t>　休薬理由: ${escapedReason}</w:t>
-      </w:r>
-    </w:p>`;
+          }
+          if (line.includes('休薬理由:')) {
+            reason = line.split('休薬理由:')[1]?.trim() || '';
+          }
         });
         
-        documentXml += `
-    <w:p>
-      <w:r>
-        <w:t>休薬をわすれてしまうと手術を受けられません。ご理解ならびにご協力よろしくお願いします。</w:t>
-      </w:r>
-    </w:p>
-  </w:body>
-</w:document>`;
-        
-        // JSZipを使用してDOCXファイルを作成
-        const zip = new JSZip();
-        
-        // DOCXファイルの構造を追加
-        zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>`);
-        
-        zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`);
-        
-        zip.file('word/document.xml', documentXml);
-        
-        zip.file('docProps/app.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
-  <Application>Microsoft Word</Application>
-  <DocSecurity>0</DocSecurity>
-  <ScaleCrop>false</ScaleCrop>
-  <LinksUpToDate>false</LinksUpToDate>
-  <CharactersWithSpaces>0</CharactersWithSpaces>
-  <SharedDoc>false</SharedDoc>
-  <HyperlinksChanged>false</HyperlinksChanged>
-  <AppVersion>16.0000</AppVersion>
-</Properties>`);
-        
-        zip.file('docProps/core.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <dc:title>手術前薬物中止判定結果</dc:title>
-  <dc:creator>手術前薬物中止判定システム</dc:creator>
-  <cp:lastModifiedBy>手術前薬物中止判定システム</cp:lastModifiedBy>
-  <cp:revision>1</cp:revision>
-  <dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created>
-  <dcterms:modified xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:modified>
-</cp:coreProperties>`);
-        
-        // ZIPファイルを生成
-        const docxContent = await zip.generateAsync({ type: 'blob' });
-        
-        // ファイル名を作成
-        const fileName = `手術前薬物中止判定_${surgeryDate}_${currentDate.replace(/\//g, '')}.docx`;
-        
-        // ダウンロード
-        const url = window.URL.createObjectURL(docxContent);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        
-        console.log('DOCX文書をダウンロードしました:', fileName);
-      } catch (error) {
-        console.error('DOCX作成エラー:', error);
-        alert('DOCXファイルの作成に失敗しました: ' + error.message);
-      }
+        // フォーマットされた内容を追加
+        docContent += `${index + 1}. 薬剤名: ${drugName}
+　休薬開始日: ${stopDate}
+　休薬理由: ${reason}
+
+`;
+      });
+      
+      // 最後の注意書きを追加
+      docContent += `休薬をわすれてしまうと手術を受けられません。ご理解ならびにご協力よろしくお願いします。`;
+      
+      // ファイル名を作成
+      const fileName = `手術前薬物中止判定_${surgeryDate}_${currentDate.replace(/\//g, '')}.docx`;
+      
+      // UTF-8 BOMを追加してBlobを作成
+      const utf8BOM = new Uint8Array([0xEF, 0xBB, 0xBF]);
+      const contentBytes = new TextEncoder().encode(docContent);
+      const combinedBytes = new Uint8Array(utf8BOM.length + contentBytes.length);
+      combinedBytes.set(utf8BOM);
+      combinedBytes.set(contentBytes, utf8BOM.length);
+      
+      // Blobを作成してダウンロード
+      const blob = new Blob([combinedBytes], { 
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      console.log('DOCX文書をダウンロードしました:', fileName);
     }
   }, []);
 
