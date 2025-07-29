@@ -232,23 +232,60 @@ export default function Home() {
       const surgeryDate = elements.surgeryDateInput.value;
       const currentDate = new Date().toLocaleDateString('ja-JP');
       
-      // シンプルなDOCX形式のコンテンツを作成
-      let docContent = `手術前薬物中止判定結果
+      // 手術日を日本語形式に変換
+      const surgeryDateObj = new Date(surgeryDate);
+      const formattedSurgeryDate = `${surgeryDateObj.getFullYear()}年${surgeryDateObj.getMonth() + 1}月${surgeryDateObj.getDate()}日`;
+      
+      // 新しいフォーマットでDOCX形式のコンテンツを作成
+      let docContent = `様の手術前の薬物中止について
 
-判定日: ${currentDate}
-手術予定日: ${surgeryDate}
+手術予定日: ${formattedSurgeryDate}
 
-判定結果:
+術前に休薬が必要な薬剤と休薬開始日
 
 `;
 
       window.currentResults.forEach((result, index) => {
-        docContent += `${index + 1}. 薬剤名: ${result.drug}
-判定結果:
-${result.text || result.error || '結果が取得できませんでした'}
+        const resultText = result.text || result.error || '結果が取得できませんでした';
+        
+        // 結果テキストから必要な情報を抽出
+        let drugName = result.drug;
+        let genericName = '';
+        let drugClass = '';
+        let stopDate = '';
+        let reason = '';
+        
+        // 結果テキストを解析して情報を抽出
+        const lines = resultText.split('\n');
+        lines.forEach(line => {
+          if (line.includes('一般名:')) {
+            genericName = line.split('一般名:')[1]?.trim() || '';
+          }
+          if (line.includes('薬剤系統:')) {
+            drugClass = line.split('薬剤系統:')[1]?.trim() || '';
+          }
+          if (line.includes('休薬開始日:')) {
+            const dateMatch = line.match(/休薬開始日:\s*(\d{4}-\d{2}-\d{2})/);
+            if (dateMatch) {
+              const dateObj = new Date(dateMatch[1]);
+              stopDate = `${dateObj.getFullYear()}年${dateObj.getMonth() + 1}月${dateObj.getDate()}日`;
+            }
+          }
+          if (line.includes('休薬理由:')) {
+            reason = line.split('休薬理由:')[1]?.trim() || '';
+          }
+        });
+        
+        // フォーマットされた内容を追加
+        docContent += `${index + 1}. 薬剤名: ${drugName}
+　休薬開始日: ${stopDate}
+　休薬理由: ${reason}
 
 `;
       });
+      
+      // 最後の注意書きを追加
+      docContent += `休薬をわすれてしまうと手術を受けられません。ご理解ならびにご協力よろしくお願いします。`;
       
       // ファイル名を作成
       const fileName = `手術前薬物中止判定_${surgeryDate}_${currentDate.replace(/\//g, '')}.docx`;
