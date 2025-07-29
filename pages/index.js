@@ -232,30 +232,42 @@ export default function Home() {
       const surgeryDate = elements.surgeryDateInput.value;
       const currentDate = new Date().toLocaleDateString('ja-JP');
       
-      // Word文書の内容を作成
-      let docContent = `
-手術前薬物中止判定結果
-
-判定日: ${currentDate}
-手術予定日: ${surgeryDate}
-
-判定結果:
-`;
+      // RTF形式でWord文書を作成（より確実にWordで開ける）
+      let rtfContent = `{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 MS Gothic;}}
+\\f0\\fs24
+手術前薬物中止判定結果\\par\\par
+判定日: ${currentDate}\\par
+手術予定日: ${surgeryDate}\\par\\par
+判定結果:\\par\\par`;
 
       window.currentResults.forEach((result, index) => {
-        docContent += `
-${index + 1}. 薬剤名: ${result.drug}
-判定結果:
-${result.text || result.error || '結果が取得できませんでした'}
-
-`;
+        const resultText = (result.text || result.error || '結果が取得できませんでした')
+          .replace(/\\/g, '\\\\')
+          .replace(/\{/g, '\\{')
+          .replace(/\}/g, '\\}')
+          .replace(/\n/g, '\\par ');
+        
+        rtfContent += `${index + 1}. 薬剤名: ${result.drug}\\par
+判定結果:\\par
+${resultText}\\par\\par`;
       });
       
+      rtfContent += '}';
+      
       // ファイル名を作成
-      const fileName = `手術前薬物中止判定_${surgeryDate}_${currentDate.replace(/\//g, '')}.doc`;
+      const fileName = `手術前薬物中止判定_${surgeryDate}_${currentDate.replace(/\//g, '')}.rtf`;
+      
+      // UTF-8 BOMを追加してBlobを作成
+      const utf8BOM = new Uint8Array([0xEF, 0xBB, 0xBF]);
+      const contentBytes = new TextEncoder().encode(rtfContent);
+      const combinedBytes = new Uint8Array(utf8BOM.length + contentBytes.length);
+      combinedBytes.set(utf8BOM);
+      combinedBytes.set(contentBytes, utf8BOM.length);
       
       // Blobを作成してダウンロード
-      const blob = new Blob([docContent], { type: 'application/msword' });
+      const blob = new Blob([combinedBytes], { 
+        type: 'application/rtf; charset=utf-8' 
+      });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -265,7 +277,7 @@ ${result.text || result.error || '結果が取得できませんでした'}
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
       
-      console.log('Word文書をダウンロードしました:', fileName);
+      console.log('RTF文書をダウンロードしました:', fileName);
     }
   }, []);
 
@@ -306,7 +318,7 @@ ${result.text || result.error || '結果が取得できませんでした'}
               className="download-btn" 
               style={{ display: 'none' }}
             >
-              Word文書をダウンロード
+              RTF文書をダウンロード
             </button>
           </div>
           <div className="results-content" id="results-content"></div>
