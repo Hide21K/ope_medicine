@@ -6,6 +6,15 @@ export default function Home() {
     console.log('現在のURL:', window.location.href);
     console.log('現在のホスト名:', window.location.hostname);
     
+    // JSZipを動的にインポート
+    let JSZip;
+    import('jszip').then(module => {
+      JSZip = module.default;
+      console.log('JSZip loaded successfully');
+    }).catch(err => {
+      console.error('JSZip load failed:', err);
+    });
+    
     // Dify API設定
     const DIFY_CONFIG = {
       url: '/api/judge',
@@ -223,61 +232,137 @@ export default function Home() {
     }
     
     // Word文書ダウンロード機能
-    function handleDownload() {
+    async function handleDownload() {
       if (!window.currentResults || window.currentResults.length === 0) {
         alert('ダウンロードする結果がありません');
+        return;
+      }
+      
+      if (!JSZip) {
+        alert('JSZipライブラリが読み込まれていません。しばらく待ってから再試行してください。');
         return;
       }
       
       const surgeryDate = elements.surgeryDateInput.value;
       const currentDate = new Date().toLocaleDateString('ja-JP');
       
-      // RTF形式でWord文書を作成（より確実にWordで開ける）
-      let rtfContent = `{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 MS Gothic;}}
-\\f0\\fs24
-手術前薬物中止判定結果\\par\\par
-判定日: ${currentDate}\\par
-手術予定日: ${surgeryDate}\\par\\par
-判定結果:\\par\\par`;
+      try {
+        // DOCX形式のXMLコンテンツを作成
+        let documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:r>
+        <w:t>手術前薬物中止判定結果</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:t>判定日: ${currentDate}</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:t>手術予定日: ${surgeryDate}</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:t>判定結果:</w:t>
+      </w:r>
+    </w:p>`;
 
-      window.currentResults.forEach((result, index) => {
-        const resultText = (result.text || result.error || '結果が取得できませんでした')
-          .replace(/\\/g, '\\\\')
-          .replace(/\{/g, '\\{')
-          .replace(/\}/g, '\\}')
-          .replace(/\n/g, '\\par ');
+        window.currentResults.forEach((result, index) => {
+          const resultText = (result.text || result.error || '結果が取得できませんでした')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+          
+          documentXml += `
+    <w:p>
+      <w:r>
+        <w:t>${index + 1}. 薬剤名: ${result.drug}</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:t>判定結果:</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:r>
+        <w:t>${resultText}</w:t>
+      </w:r>
+    </w:p>`;
+        });
         
-        rtfContent += `${index + 1}. 薬剤名: ${result.drug}\\par
-判定結果:\\par
-${resultText}\\par\\par`;
-      });
-      
-      rtfContent += '}';
-      
-      // ファイル名を作成
-      const fileName = `手術前薬物中止判定_${surgeryDate}_${currentDate.replace(/\//g, '')}.rtf`;
-      
-      // UTF-8 BOMを追加してBlobを作成
-      const utf8BOM = new Uint8Array([0xEF, 0xBB, 0xBF]);
-      const contentBytes = new TextEncoder().encode(rtfContent);
-      const combinedBytes = new Uint8Array(utf8BOM.length + contentBytes.length);
-      combinedBytes.set(utf8BOM);
-      combinedBytes.set(contentBytes, utf8BOM.length);
-      
-      // Blobを作成してダウンロード
-      const blob = new Blob([combinedBytes], { 
-        type: 'application/rtf; charset=utf-8' 
-      });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      
-      console.log('RTF文書をダウンロードしました:', fileName);
+        documentXml += `
+  </w:body>
+</w:document>`;
+        
+        // JSZipを使用してDOCXファイルを作成
+        const zip = new JSZip();
+        
+        // DOCXファイルの構造を追加
+        zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`);
+        
+        zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`);
+        
+        zip.file('word/document.xml', documentXml);
+        
+        zip.file('docProps/app.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
+  <Application>Microsoft Word</Application>
+  <DocSecurity>0</DocSecurity>
+  <ScaleCrop>false</ScaleCrop>
+  <LinksUpToDate>false</LinksUpToDate>
+  <CharactersWithSpaces>0</CharactersWithSpaces>
+  <SharedDoc>false</SharedDoc>
+  <HyperlinksChanged>false</HyperlinksChanged>
+  <AppVersion>16.0000</AppVersion>
+</Properties>`);
+        
+        zip.file('docProps/core.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>手術前薬物中止判定結果</dc:title>
+  <dc:creator>手術前薬物中止判定システム</dc:creator>
+  <cp:lastModifiedBy>手術前薬物中止判定システム</cp:lastModifiedBy>
+  <cp:revision>1</cp:revision>
+  <dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:modified>
+</cp:coreProperties>`);
+        
+        // ZIPファイルを生成
+        const docxContent = await zip.generateAsync({ type: 'blob' });
+        
+        // ファイル名を作成
+        const fileName = `手術前薬物中止判定_${surgeryDate}_${currentDate.replace(/\//g, '')}.docx`;
+        
+        // ダウンロード
+        const url = window.URL.createObjectURL(docxContent);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        console.log('DOCX文書をダウンロードしました:', fileName);
+      } catch (error) {
+        console.error('DOCX作成エラー:', error);
+        alert('DOCXファイルの作成に失敗しました: ' + error.message);
+      }
     }
   }, []);
 
@@ -318,7 +403,7 @@ ${resultText}\\par\\par`;
               className="download-btn" 
               style={{ display: 'none' }}
             >
-              RTF文書をダウンロード
+              DOCX文書をダウンロード
             </button>
           </div>
           <div className="results-content" id="results-content"></div>
