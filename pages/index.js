@@ -2,14 +2,13 @@ import { useEffect } from 'react';
 
 export default function Home() {
   useEffect(() => {
-    // --- Begin: Provided script logic adapted for React/Next.js ---
     console.log('アプリケーションが初期化されました');
     console.log('現在のURL:', window.location.href);
     console.log('現在のホスト名:', window.location.hostname);
     
     // Dify API設定
     const DIFY_CONFIG = {
-      url: '/api/judge', // Next.js API route
+      url: '/api/judge',
       headers: {
         'Content-Type': 'application/json'
       }
@@ -26,7 +25,8 @@ export default function Home() {
       resultsContainer: document.getElementById('results-container'),
       resultsContent: document.getElementById('results-content'),
       errorContainer: document.getElementById('error-container'),
-      errorMessage: document.getElementById('error-message')
+      errorMessage: document.getElementById('error-message'),
+      downloadBtn: document.getElementById('download-btn')
     };
 
     // DOM要素の存在確認
@@ -43,12 +43,18 @@ export default function Home() {
     elements.form.addEventListener('submit', handleFormSubmit);
     elements.medicineNameInput.addEventListener('input', validateForm);
     elements.surgeryDateInput.addEventListener('change', validateForm);
+    if (elements.downloadBtn) {
+      elements.downloadBtn.addEventListener('click', handleDownload);
+    }
 
     // 初期状態の設定
     hideResults();
     hideError();
     const today = new Date().toISOString().split('T')[0];
     elements.surgeryDateInput.min = today;
+
+    // グローバル変数で結果を保持
+    window.currentResults = [];
 
     // --- Functions ---
     function hideResults() {
@@ -83,19 +89,21 @@ export default function Home() {
       }
     }
     function validateForm() {
-      const medicineName = elements.medicineNameInput.value.trim();
+      const medicineNames = elements.medicineNameInput.value.trim();
       const surgeryDate = elements.surgeryDateInput.value;
-      const isValid = medicineName && surgeryDate;
+      const isValid = medicineNames && surgeryDate;
       elements.submitBtn.disabled = !isValid;
     }
     function getFormData() {
+      const medicineNames = elements.medicineNameInput.value.trim();
+      const drugs = medicineNames.split('\n').map(d => d.trim()).filter(Boolean);
       return {
-        drug: elements.medicineNameInput.value.trim(),
+        drugs,
         surgeryDate: elements.surgeryDateInput.value
       };
     }
     function validateFormData(formData) {
-      if (!formData.drug) {
+      if (!formData.drugs || formData.drugs.length === 0) {
         displayError('薬剤名を入力してください');
         return false;
       }
@@ -112,14 +120,33 @@ export default function Home() {
       }
       return true;
     }
-    function formatResults(text) {
-      if (!text) {
+    function formatResults(results) {
+      if (!results || results.length === 0) {
         return '<div class="result-item">結果が取得できませんでした。</div>';
       }
+      
+      return results.map((result, index) => {
+        const drugName = result.drug;
+        const resultText = result.text || result.error || '結果が取得できませんでした';
+        
+        return `
+          <div class="drug-result">
+            <h3 class="drug-name">${escapeHtml(drugName)}</h3>
+            <div class="result-content">
+              ${formatResultText(resultText)}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+    function formatResultText(text) {
+      if (!text) return '<div class="result-item">結果が取得できませんでした。</div>';
+      
       const lines = text.split('\n').filter(line => line.trim());
       if (lines.length === 0) {
         return '<div class="result-item">結果が取得できませんでした。</div>';
       }
+      
       const formattedLines = lines.map(line => {
         const trimmedLine = line.trim();
         if (trimmedLine.includes('について') || trimmedLine.includes('判定結果') || trimmedLine.includes('中止') || trimmedLine.includes('継続')) {
@@ -127,6 +154,7 @@ export default function Home() {
         }
         return `<div class="result-item">${escapeHtml(trimmedLine)}</div>`;
       });
+      
       return formattedLines.join('');
     }
     function escapeHtml(text) {
@@ -134,50 +162,111 @@ export default function Home() {
       div.textContent = text;
       return div.innerHTML;
     }
-    function displayResults(response) {
-      let resultText = '';
-      if (response.text) {
-        resultText = response.text;
-      } else if (response.data && response.data.outputs && response.data.outputs.text) {
-        resultText = response.data.outputs.text;
-      } else if (response.outputs && response.outputs.text) {
-        resultText = response.outputs.text;
-      } else if (typeof response === 'string') {
-        resultText = response;
-      } else {
-        resultText = JSON.stringify(response, null, 2);
-      }
-      const formattedResults = formatResults(resultText);
+    function displayResults(results) {
+      window.currentResults = results;
+      const formattedResults = formatResults(results);
       elements.resultsContent.innerHTML = formattedResults;
       showResults();
       elements.resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      
+      // ダウンロードボタンを表示
+      if (elements.downloadBtn) {
+        elements.downloadBtn.style.display = 'block';
+      }
     }
     async function handleFormSubmit(event) {
       event.preventDefault();
       const formData = getFormData();
       if (!validateFormData(formData)) return;
+      
       setLoadingState(true);
       hideResults();
       hideError();
+      
       try {
+        console.log('複数薬剤の判定を開始:', formData);
+        
+        // 複数薬剤を一度にAPIに送信
         const response = await fetch(DIFY_CONFIG.url, {
           method: 'POST',
           headers: DIFY_CONFIG.headers,
           body: JSON.stringify(formData)
         });
+        
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(`API リクエストに失敗しました (${response.status}): ${errorText}`);
         }
+        
         const responseData = await response.json();
-        displayResults(responseData);
+        console.log('APIレスポンス:', responseData);
+        
+        // 結果の処理
+        let results = [];
+        if (responseData.results && Array.isArray(responseData.results)) {
+          // 複数薬剤の結果
+          results = responseData.results;
+        } else if (responseData.text) {
+          // 単一薬剤の結果（フォールバック）
+          results = [{ drug: formData.drugs[0], text: responseData.text }];
+        } else {
+          throw new Error('予期しないレスポンス形式です');
+        }
+        
+        displayResults(results);
       } catch (error) {
+        console.error('エラーが発生しました:', error);
         displayError(error.message);
       } finally {
         setLoadingState(false);
       }
     }
-    // --- End: Provided script logic ---
+    
+    // Word文書ダウンロード機能
+    function handleDownload() {
+      if (!window.currentResults || window.currentResults.length === 0) {
+        alert('ダウンロードする結果がありません');
+        return;
+      }
+      
+      const surgeryDate = elements.surgeryDateInput.value;
+      const currentDate = new Date().toLocaleDateString('ja-JP');
+      
+      // Word文書の内容を作成
+      let docContent = `
+手術前薬物中止判定結果
+
+判定日: ${currentDate}
+手術予定日: ${surgeryDate}
+
+判定結果:
+`;
+
+      window.currentResults.forEach((result, index) => {
+        docContent += `
+${index + 1}. 薬剤名: ${result.drug}
+判定結果:
+${result.text || result.error || '結果が取得できませんでした'}
+
+`;
+      });
+      
+      // ファイル名を作成
+      const fileName = `手術前薬物中止判定_${surgeryDate}_${currentDate.replace(/\//g, '')}.doc`;
+      
+      // Blobを作成してダウンロード
+      const blob = new Blob([docContent], { type: 'application/msword' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      console.log('Word文書をダウンロードしました:', fileName);
+    }
   }, []);
 
   return (
@@ -188,10 +277,16 @@ export default function Home() {
       </header>
       <main className="main-content">
         <div className="form-container">
-          <form id="medicineForm" className="medicine-form" autoComplete="off">
+          <form id="medicineForm" className="medicine-form">
             <div className="form-group">
-              <label htmlFor="medicine-name">薬剤名</label>
-              <input type="text" id="medicine-name" name="medicine-name" placeholder="例：アスピリン" required />
+              <label htmlFor="medicine-name">薬剤名（1行に1つ）</label>
+              <textarea 
+                id="medicine-name" 
+                name="medicine-name" 
+                placeholder="例：アスピリン&#10;ワルファリン&#10;クロピドグレル" 
+                rows={5}
+                required
+              />
             </div>
             <div className="form-group">
               <label htmlFor="surgery-date">手術予定日</label>
@@ -204,7 +299,16 @@ export default function Home() {
           </form>
         </div>
         <div className="results-container" id="results-container" style={{ display: 'none' }}>
-          <h2 className="results-title">判定結果</h2>
+          <div className="results-header">
+            <h2 className="results-title">判定結果</h2>
+            <button 
+              id="download-btn" 
+              className="download-btn" 
+              style={{ display: 'none' }}
+            >
+              Word文書をダウンロード
+            </button>
+          </div>
           <div className="results-content" id="results-content"></div>
         </div>
         <div className="error-container" id="error-container" style={{ display: 'none' }}>
