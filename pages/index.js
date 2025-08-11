@@ -247,7 +247,7 @@ export default function Home() {
 
         // タイトル（サイズ指定なしの指示だが16pt程度で統一）
         children.push(new Paragraph({
-          children: [new TextRun({ text: '____________________様の手術前の薬物中止について', size: 32 /*16pt*/, color: '000000' })],
+          children: [new TextRun({ text: '氏名：____________________様の手術前の薬物中止について', size: 32 /*16pt*/, color: '000000' })],
         }));
         children.push(new Paragraph({ children: [new TextRun({ text: '', size: 24 })] }));
 
