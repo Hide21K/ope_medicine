@@ -26,7 +26,8 @@ export default function Home() {
       resultsContent: document.getElementById('results-content'),
       errorContainer: document.getElementById('error-container'),
       errorMessage: document.getElementById('error-message'),
-      downloadBtn: document.getElementById('download-btn')
+      downloadBtn: document.getElementById('download-btn'),
+      pdfDownloadBtn: document.getElementById('pdf-download-btn')
     };
 
     // DOM要素の存在確認
@@ -45,6 +46,9 @@ export default function Home() {
     elements.surgeryDateInput.addEventListener('change', validateForm);
     if (elements.downloadBtn) {
       elements.downloadBtn.addEventListener('click', handleDownload);
+    }
+    if (elements.pdfDownloadBtn) {
+      elements.pdfDownloadBtn.addEventListener('click', handlePdfDownload);
     }
 
     // 初期状態の設定
@@ -172,6 +176,9 @@ export default function Home() {
       // ダウンロードボタンを表示
       if (elements.downloadBtn) {
         elements.downloadBtn.style.display = 'block';
+      }
+      if (elements.pdfDownloadBtn) {
+        elements.pdfDownloadBtn.style.display = 'block';
       }
     }
     async function handleFormSubmit(event) {
@@ -346,6 +353,90 @@ export default function Home() {
         alert('Wordファイルの作成に失敗しました: ' + error.message);
       }
     }
+
+    // PDF文書ダウンロード機能
+    async function handlePdfDownload() {
+      if (!window.currentResults || window.currentResults.length === 0) {
+        alert('ダウンロードする結果がありません');
+        return;
+      }
+
+      const { jsPDF } = await import('jspdf');
+
+      const surgeryDate = elements.surgeryDateInput.value;
+      const currentDate = new Date().toLocaleDateString('ja-JP');
+
+      const toJaDate = (iso) => {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return iso;
+        return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+      };
+
+      const formattedSurgeryDate = toJaDate(surgeryDate);
+
+      try {
+        const pdf = new jsPDF();
+
+        // タイトル（16pt程度）
+        pdf.setFontSize(16);
+        pdf.text('氏名：____________________様の手術前の薬物中止について', 20, 30);
+
+        // 手術予定日（16pt 黒）
+        pdf.text(`手術予定日: ${formattedSurgeryDate}`, 20, 50);
+
+        // 見出し（16pt 黒）
+        pdf.text('術前に休薬が必要な薬剤と休薬開始日', 20, 70);
+
+        let yPosition = 90;
+
+        // 各薬剤
+        window.currentResults.forEach((result, index) => {
+          const raw = result.text || result.error || '';
+
+          // 結果テキストから休薬開始日と理由を抽出
+          let stopDateIso = '';
+          let reason = '';
+          const lines = raw.split('\n');
+          for (const line of lines) {
+            if (!stopDateIso && line.includes('休薬開始日')) {
+              const m = line.match(/休薬開始日\s*[:：]\s*(\d{4}-\d{2}-\d{2})/);
+              if (m) stopDateIso = m[1];
+            }
+            if (!reason && line.includes('休薬理由')) {
+              const r = line.split(/休薬理由\s*[:：]/)[1];
+              if (r) reason = r.trim();
+            }
+          }
+          const stopDateJa = stopDateIso ? toJaDate(stopDateIso) : '';
+
+          // 1. 薬剤名（14pt 黒）
+          pdf.setFontSize(14);
+          pdf.text(`${index + 1}. 薬剤名: ${result.drug}`, 20, yPosition);
+
+          // 休薬開始日（12pt）
+          pdf.setFontSize(12);
+          pdf.text(`　休薬開始日: ${stopDateJa || '記載なし'}`, 20, yPosition + 10);
+
+          // 休薬理由（12pt 黒）
+          pdf.text(`　休薬理由: ${reason || '記載なし'}`, 20, yPosition + 20);
+
+          yPosition += 40; // 次の薬剤との間隔
+        });
+
+        // 最後の注意文（14pt 黒）
+        pdf.setFontSize(14);
+        pdf.text('休薬をわすれてしまうと手術を受けられません。ご理解ならびにご協力よろしくお願いします。', 20, yPosition + 20);
+
+        // PDFをダウンロード
+        const fileName = `手術前薬物中止判定_${surgeryDate}_${currentDate.replace(/\//g, '')}.pdf`;
+        pdf.save(fileName);
+        
+        console.log('PDF文書をダウンロードしました:', fileName);
+      } catch (error) {
+        console.error('PDF作成エラー:', error);
+        alert('PDFファイルの作成に失敗しました: ' + error.message);
+      }
+    }
   }, []);
 
   return (
@@ -386,6 +477,13 @@ export default function Home() {
               style={{ display: 'none' }}
             >
               患者様へ渡すWord文書をダウンロードする
+            </button>
+            <button 
+              id="pdf-download-btn" 
+              className="pdf-download-btn" 
+              style={{ display: 'none' }}
+            >
+              PDF文書をダウンロードする
             </button>
           </div>
           <div className="results-content" id="results-content"></div>
