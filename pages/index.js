@@ -287,8 +287,8 @@ export default function Home() {
           let reason = '';
           const lines = raw.split('\n');
           for (const line of lines) {
-            if (!stopDateIso && line.includes('休薬開始日')) {
-              const m = line.match(/休薬開始日\s*[:：]\s*(\d{4}-\d{2}-\d{2})/);
+            if (!stopDateIso && (line.includes('休薬日') || line.includes('休薬開始日'))) {
+              const m = line.match(/(?:休薬日|休薬開始日)\s*[:：]\s*(\d{4}-\d{2}-\d{2})/);
               if (m) stopDateIso = m[1];
             }
             if (!reason && line.includes('休薬理由')) {
@@ -440,8 +440,8 @@ export default function Home() {
               let reason = '';
               const lines = raw.split('\n');
               for (const line of lines) {
-                if (!stopDateIso && line.includes('休薬開始日')) {
-                  const m = line.match(/休薬開始日\s*[:：]\s*(\d{4}-\d{2}-\d{2})/);
+                if (!stopDateIso && (line.includes('休薬日') || line.includes('休薬開始日'))) {
+                  const m = line.match(/(?:休薬日|休薬開始日)\s*[:：]\s*(\d{4}-\d{2}-\d{2})/);
                   if (m) stopDateIso = m[1];
                 }
                 if (!reason && line.includes('休薬理由')) {
