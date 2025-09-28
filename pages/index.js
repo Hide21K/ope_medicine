@@ -307,7 +307,7 @@ export default function Home() {
 
           // 休薬開始日（12pt、"休薬開始日:"は黒、日付部分は赤かつアンダーライン）
           const stopDateRuns = [
-            new TextRun({ text: `　休薬開始日: ${result.day}`, size: 24 /*12pt*/, color: '000000' }),
+            new TextRun({ text: '　休薬開始日: ', size: 24 /*12pt*/, color: '000000' }),
           ];
           if (stopDateJa) {
             stopDateRuns.push(
@@ -316,6 +316,14 @@ export default function Home() {
                 size: 24 /*12pt*/,
                 color: 'FF0000',
                 underline: { type: UnderlineType.SINGLE },
+              })
+            );
+          } else {
+            stopDateRuns.push(
+              new TextRun({
+                text: '記載なし',
+                size: 24 /*12pt*/,
+                color: '000000',
               })
             );
           }
