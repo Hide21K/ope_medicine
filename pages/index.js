@@ -238,14 +238,13 @@ export default function Home() {
       }
     }
     
-    // Word文書ダウンロード機能
     async function handleDownload() {
       if (!window.currentResults || window.currentResults.length === 0) {
         alert('ダウンロードする結果がありません');
         return;
       }
 
-      const { Document, Packer, Paragraph, TextRun, UnderlineType } = await import('docx');
+      const { Document, Packer, Paragraph, TextRun, AlignmentType } = await import('docx');
 
       const surgeryDate = elements.surgeryDateInput.value;
       const currentDate = new Date().toLocaleDateString('ja-JP');
@@ -258,103 +257,105 @@ export default function Home() {
 
       const formattedSurgeryDate = toJaDate(surgeryDate);
 
-      try {
-        const children = [];
+      const drugsToStop = [];
+      const drugsToContinue = [];
 
-        // タイトル（サイズ指定なしの指示だが16pt程度で統一）
-        children.push(new Paragraph({
-          children: [new TextRun({ text: '氏名：____________________様の手術前の薬物中止について', size: 32 /*16pt*/, color: '000000' })],
-        }));
-        children.push(new Paragraph({ children: [new TextRun({ text: '', size: 24 })] }));
-
-        // 手術予定日（16pt 黒）
-        children.push(new Paragraph({
-          children: [new TextRun({ text: `手術予定日: ${formattedSurgeryDate}`, size: 32 /*16pt*/, color: '000000' })],
-        }));
-        children.push(new Paragraph({ children: [new TextRun({ text: '', size: 24 })] }));
-
-        // 見出し（16pt 黒）
-        children.push(new Paragraph({
-          children: [new TextRun({ text: '術前に休薬が必要な薬剤と休薬開始日', size: 32 /*16pt*/, color: '000000' })],
-        }));
-        children.push(new Paragraph({ children: [new TextRun({ text: '', size: 24 })] }));
-
-        // 各薬剤
-        window.currentResults.forEach((result, index) => {
-          const raw = result.text || result.error || '';
-
-          // 結果テキストから休薬開始日と理由を抽出
+      window.currentResults.forEach(result => {
+        const raw = result.text || result.error || '';
+        if (raw.includes('休薬の必要はありません')) {
+          drugsToContinue.push(result.drug);
+        } else {
           let stopDateIso = '';
-          let reason = '';
           const lines = raw.split('\n');
           for (const line of lines) {
             if (!stopDateIso && (line.includes('休薬日') || line.includes('休薬開始日'))) {
               const m = line.match(/(?:休薬日|休薬開始日)[\s　]*[:：][\s　]*(\d{4}[-\/]\d{2}[-\/]\d{2})/);
               if (m) stopDateIso = m[1];
             }
-            if (!reason && line.includes('休薬理由')) {
-              const r = line.split(/休薬理由\s*[:：]/)[1];
-              if (r) reason = r.trim();
-            }
           }
-          const stopDateJa = stopDateIso ? toJaDate(stopDateIso) : '';
+          drugsToStop.push({
+            name: result.drug,
+            stopDate: stopDateIso ? toJaDate(stopDateIso) : '記載なし',
+          });
+        }
+      });
 
-          // 1. 薬剤名（14pt 黒）
-          children.push(new Paragraph({
-            children: [
-              new TextRun({ text: `${index + 1}. 薬剤名: ${result.drug}`, size: 28 /*14pt*/, color: '000000' }),
-            ],
-          }));
+      try {
+        const children = [];
 
-          // 休薬開始日（12pt、"休薬開始日:"は黒、日付部分は赤かつアンダーライン）
-          const stopDateRuns = [
-            new TextRun({ text: '　休薬開始日: ', size: 24 /*12pt*/, color: '000000' }),
-          ];
-          if (stopDateJa) {
-            stopDateRuns.push(
-              new TextRun({
-                text: stopDateJa,
-                size: 24 /*12pt*/,
-                color: 'FF0000',
-                underline: { type: UnderlineType.SINGLE },
-              })
-            );
-          } else {
-            stopDateRuns.push(
-              new TextRun({
-                text: '記載なし',
-                size: 24 /*12pt*/,
-                color: '000000',
-              })
-            );
-          }
-          children.push(new Paragraph({ children: stopDateRuns }));
-
-          // 休薬理由（12pt 黒）
-          children.push(new Paragraph({
-            children: [
-              new TextRun({ text: `　休薬理由: ${reason || '記載なし'}`, size: 24 /*12pt*/, color: '000000' }),
-            ],
-          }));
-
-          // 空行
-          children.push(new Paragraph({ children: [new TextRun({ text: '', size: 24 })] }));
-        });
-
-        // 最後の注意文（14pt 黒）
         children.push(new Paragraph({
-          children: [
-            new TextRun({
-              text: '休薬をわすれてしまうと手術を受けられません。ご理解ならびにご協力よろしくお願いします。',
-              size: 28 /*14pt*/,
-              color: '000000',
-            }),
-          ],
+          children: [new TextRun({ text: '手術前の薬剤中止について', size: 32, bold: true })],
+          alignment: AlignmentType.CENTER,
+        }));
+        children.push(new Paragraph({ text: '' }));
+
+        children.push(new Paragraph({
+          children: [new TextRun({ text: `氏名：___________________様`, size: 28 })],
+        }));
+        children.push(new Paragraph({
+          children: [new TextRun({ text: `手術予定日：${formattedSurgeryDate}`, size: 28 })],
+        }));
+        children.push(new Paragraph({ text: '----------------------------------------------' }));
+
+        if (drugsToStop.length > 0) {
+          children.push(new Paragraph({
+            children: [new TextRun({ text: '【休薬が必要な薬剤】', size: 28, bold: true })],
+          }));
+          children.push(new Paragraph({
+            children: [new TextRun({ text: '以下の薬剤は、記載された休薬日より休薬が必要です。', size: 24 })],
+          }));
+          children.push(new Paragraph({ text: '' }));
+          drugsToStop.forEach((drug, index) => {
+            children.push(new Paragraph({
+              children: [new TextRun({ text: `${index + 1}. ${drug.name}`, size: 24 })],
+            }));
+            children.push(new Paragraph({
+              children: [new TextRun({ text: `   休薬日：${drug.stopDate}`, size: 24 })],
+            }));
+          });
+        }
+        
+        children.push(new Paragraph({ text: '----------------------------------------------' }));
+
+        if (drugsToContinue.length > 0) {
+          children.push(new Paragraph({
+            children: [new TextRun({ text: '【休薬が不要な薬剤】', size: 28, bold: true })],
+          }));
+          children.push(new Paragraph({
+            children: [new TextRun({ text: '以下の薬剤は術前の休薬は不要です。', size: 24 })],
+          }));
+          children.push(new Paragraph({ text: '' }));
+          drugsToContinue.forEach(drugName => {
+            children.push(new Paragraph({
+              children: [new TextRun({ text: drugName, size: 24 })],
+            }));
+          });
+        }
+
+        children.push(new Paragraph({ text: '----------------------------------------------' }));
+        children.push(new Paragraph({ text: '' }));
+
+        children.push(new Paragraph({
+          children: [new TextRun({ text: '休薬を忘れてしまうと、手術を受けられません。ご理解ならびにご協力の程、よろしくお願いいたします。', size: 24 })],
         }));
 
-        const doc = new Document({ sections: [{ children }] });
-        const blob = await Packer.toBlob(doc);
+        const doc = new Document({
+          sections: [{
+            properties: {
+              page: {
+                margin: {
+                  top: 1440,
+                  right: 1440,
+                  bottom: 1440,
+                  left: 1440,
+                },
+              },
+            },
+            children,
+          }],
+        });
 
+        const blob = await Packer.toBlob(doc);
         const fileName = `手術前薬物中止判定_${surgeryDate}_${currentDate.replace(/\//g, '')}.docx`;
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -371,7 +372,6 @@ export default function Home() {
       }
     }
 
-    // PDF文書ダウンロード機能
     async function handlePdfDownload() {
       if (!window.currentResults || window.currentResults.length === 0) {
         alert('ダウンロードする結果がありません');
@@ -390,6 +390,29 @@ export default function Home() {
 
         const formattedSurgeryDate = toJaDate(surgeryDate);
 
+        const drugsToStop = [];
+        const drugsToContinue = [];
+
+        window.currentResults.forEach(result => {
+          const raw = result.text || result.error || '';
+          if (raw.includes('休薬の必要はありません')) {
+            drugsToContinue.push(result.drug);
+          } else {
+            let stopDateIso = '';
+            const lines = raw.split('\n');
+            for (const line of lines) {
+              if (!stopDateIso && (line.includes('休薬日') || line.includes('休薬開始日'))) {
+                const m = line.match(/(?:休薬日|休薬開始日)[\s　]*[:：][\s　]*(\d{4}[-\/]\d{2}[-\/]\d{2})/);
+                if (m) stopDateIso = m[1];
+              }
+            }
+            drugsToStop.push({
+              name: result.drug,
+              stopDate: stopDateIso ? toJaDate(stopDateIso) : '記載なし',
+            });
+          }
+        });
+
         // 印刷用のHTMLを作成
         const printContent = `
           <!DOCTYPE html>
@@ -399,73 +422,63 @@ export default function Home() {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>手術前薬物中止判定</title>
             <style>
+              body { font-family: 'MS Gothic', 'Yu Gothic', sans-serif; line-height: 1.8; padding: 20px; }
+              .header, .footer, .section { margin-bottom: 20px; }
+              .center { text-align: center; }
+              h1 { font-size: 18pt; }
+              h2 { font-size: 14pt; }
+              p { margin: 0; font-size: 12pt; }
+              .drug-list { padding-left: 20px; }
+              .drug-item { margin-bottom: 10px; }
+              hr { border: none; border-top: 1px solid #ccc; margin: 20px 0; }
+              .no-print { display: none; }
               @media print {
-                body { margin: 0; padding: 20px; font-family: 'MS Gothic', 'Yu Gothic', sans-serif; }
-                .page { page-break-after: always; }
                 .no-print { display: none; }
-              }
-              body { font-family: 'MS Gothic', 'Yu Gothic', sans-serif; line-height: 1.6; }
-              .title { font-size: 18pt; font-weight: bold; margin-bottom: 20px; }
-              .section { margin-bottom: 15px; }
-              .drug-item { margin-bottom: 20px; border-bottom: 1px solid #ccc; padding-bottom: 10px; }
-              .drug-name { font-size: 14pt; font-weight: bold; color: #000; }
-              .stop-date { font-size: 12pt; color: #000; }
-              .stop-date-value { color: #FF0000; text-decoration: underline; }
-              .reason { font-size: 12pt; color: #000; }
-              .note { font-size: 14pt; font-weight: bold; margin-top: 30px; color: #000; }
-              .print-btn { 
-                position: fixed; top: 20px; right: 20px; 
-                padding: 10px 20px; background: #007bff; color: white; 
-                border: none; border-radius: 5px; cursor: pointer; 
               }
             </style>
           </head>
           <body>
-            <button class="print-btn no-print" onclick="window.print()">PDFとして保存</button>
-            
-            <div class="title">氏名：____________________様の手術前の薬物中止について</div>
-            
-            <div class="section">
-              <strong>手術予定日: ${formattedSurgeryDate}</strong>
+            <div class="header center">
+              <h1>手術前の薬剤中止について</h1>
             </div>
-            
-            <div class="section">
-              <strong>術前に休薬が必要な薬剤と休薬開始日</strong>
-            </div>
-            
-            ${window.currentResults.map((result, index) => {
-              const raw = result.text || result.error || '';
-              
-              // 結果テキストから休薬開始日と理由を抽出
-              let stopDateIso = '';
-              let reason = '';
-              const lines = raw.split('\n');
-              for (const line of lines) {
-                if (!stopDateIso && (line.includes('休薬日') || line.includes('休薬開始日'))) {
-                  const m = line.match(/(?:休薬日|休薬開始日)[\s　]*[:：][\s　]*(\d{4}[-\/]\d{2}[-\/]\d{2})/);
-                  if (m) stopDateIso = m[1];
-                }
-                if (!reason && line.includes('休薬理由')) {
-                  const r = line.split(/休薬理由\s*[:：]/)[1];
-                  if (r) reason = r.trim();
-                }
-              }
-              const stopDateJa = stopDateIso ? toJaDate(stopDateIso) : '';
-              
-              return `
-                <div class="drug-item">
-                  <div class="drug-name">${index + 1}. 薬剤名: ${result.drug}</div>
-                  <div class="stop-date">
-                    　休薬開始日: <span class="stop-date-value">${stopDateJa || '記載なし'}</span>
-                  </div>
-                  <div class="reason">　休薬理由: ${reason || '記載なし'}</div>
+
+            <p>氏名：___________________様</p>
+            <p>手術予定日：${formattedSurgeryDate}</p>
+
+            <hr>
+
+            ${drugsToStop.length > 0 ? `
+              <div class="section">
+                <h2>【休薬が必要な薬剤】</h2>
+                <p>以下の薬剤は、記載された休薬日より休薬が必要です。</p>
+                <div class="drug-list">
+                  ${drugsToStop.map((drug, index) => `
+                    <div class="drug-item">
+                      <p>${index + 1}. ${drug.name}</p>
+                      <p>　 休薬日：${drug.stopDate}</p>
+                    </div>
+                  `).join('')}
                 </div>
-              `;
-            }).join('')}
-            
-            <div class="note">
-              休薬をわすれてしまうと手術を受けられません。ご理解ならびにご協力よろしくお願いします。
+              </div>
+              <hr>
+            ` : ''}
+
+            ${drugsToContinue.length > 0 ? `
+              <div class="section">
+                <h2>【休薬が不要な薬剤】</h2>
+                <p>以下の薬剤は術前の休薬は不要です。</p>
+                <div class="drug-list">
+                  ${drugsToContinue.map(drugName => `<p>${drugName}</p>`).join('')}
+                </div>
+              </div>
+              <hr>
+            ` : ''}
+
+            <div class="footer">
+              <p>休薬を忘れてしまうと、手術を受けられません。ご理解ならびにご協力の程、よろしくお願いいたします。</p>
             </div>
+            
+            <button class="no-print" style="position: fixed; top: 20px; right: 20px; padding: 10px;" onclick="window.print()">印刷 / PDF保存</button>
           </body>
           </html>
         `;
@@ -474,11 +487,6 @@ export default function Home() {
         const printWindow = window.open('', '_blank');
         printWindow.document.write(printContent);
         printWindow.document.close();
-        
-        // 印刷ダイアログを自動で開く（PDFとして保存可能）
-        setTimeout(() => {
-          printWindow.print();
-        }, 500);
         
         console.log('PDF印刷ダイアログを開きました');
       } catch (error) {
