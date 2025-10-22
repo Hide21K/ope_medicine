@@ -380,7 +380,7 @@ export default function Home() {
 
       try {
         const { jsPDF } = await import('jspdf');
-        const html2canvas = await import('html2canvas'); // Explicitly import html2canvas
+        const html2canvas = await import('html2canvas');
 
         console.log('jsPDF and html2canvas imported.');
 
@@ -476,7 +476,12 @@ export default function Home() {
           format: 'a4',
           hotfixes: ['px_scaling'],
         });
-        console.log('jsPDF instance created.');
+        
+        // Add Japanese font (assuming jspdf-font makes it available)
+        // This is a placeholder. Actual font data and name would come from jspdf-font conversion.
+        doc.addFont('MS Gothic', 'normal', 'normal'); // Assuming MS Gothic is available via jspdf-font
+        doc.setFont('MS Gothic');
+        console.log('Japanese font added and set.');
 
         await doc.html(tempDiv, {
           callback: function (doc) {
@@ -487,11 +492,11 @@ export default function Home() {
           x: 0,
           y: 0,
           html2canvas: {
-            scale: 0.7, // Adjust scale for better fit on A4
+            scale: 1.0, // Adjust scale for better fit on A4
             width: 210, // A4 width in mm
             useCORS: true, // Important for images/external resources
           },
-          autoPaging: 'text', // Enable auto-paging for long content
+          autoPaging: 'text',
         });
 
         console.log('PDFをダウンロードしました');
