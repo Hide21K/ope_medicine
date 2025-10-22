@@ -310,8 +310,8 @@ export default function Home() {
               children: [new TextRun({ text: `${index + 1}. ${drug.name}`, size: 24 })],
             }));
             children.push(new Paragraph({
-              children: [new TextRun({ text: `   休薬日：${drug.stopDate}`, size: 24 })],
-            }));
+            children: [new TextRun({ text: `   休薬日：`, size: 24 }), new TextRun({ text: drug.stopDate, size: 24, color: 'FF0000', bold: true, underline: { type: UnderlineType.SINGLE } })],
+            });
           });
         }
         
@@ -344,10 +344,10 @@ export default function Home() {
             properties: {
               page: {
                 margin: {
-                  top: 1440,
-                  right: 1440,
-                  bottom: 1440,
-                  left: 1440,
+                  top: 1417, // Approximately 2.5cm
+                  right: 1417, // Approximately 2.5cm
+                  bottom: 1417, // Approximately 2.5cm
+                  left: 1417, // Approximately 2.5cm
                 },
               },
             },
@@ -422,7 +422,7 @@ export default function Home() {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>手術前薬物中止判定</title>
             <style>
-              body { font-family: 'MS Gothic', 'Yu Gothic', sans-serif; line-height: 1.8; padding: 20px; }
+              body { font-family: 'MS Gothic', 'Yu Gothic', sans-serif; line-height: 1.8; padding: 25mm; }
               .header, .footer, .section { margin-bottom: 20px; }
               .center { text-align: center; }
               h1 { font-size: 18pt; }
@@ -432,6 +432,7 @@ export default function Home() {
               .drug-item { margin-bottom: 10px; }
               hr { border: none; border-top: 1px solid #ccc; margin: 20px 0; }
               .no-print { display: none; }
+              .stop-date-value { font-weight: bold; }
               @media print {
                 .no-print { display: none; }
               }
@@ -455,7 +456,7 @@ export default function Home() {
                   ${drugsToStop.map((drug, index) => `
                     <div class="drug-item">
                       <p>${index + 1}. ${drug.name}</p>
-                      <p>　 休薬日：${drug.stopDate}</p>
+                      <p>　 休薬日：<span style="color: #FF0000; text-decoration: underline;">${drug.stopDate}</span></p>
                     </div>
                   `).join('')}
                 </div>
