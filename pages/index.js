@@ -379,6 +379,11 @@ export default function Home() {
       }
 
       try {
+        const { jsPDF } = await import('jspdf');
+        // html2canvas is often a peer dependency for jspdf's html method
+        // If it's not automatically bundled, you might need to import it explicitly
+        // const html2canvas = await import('html2canvas');
+
         const surgeryDate = elements.surgeryDateInput.value;
         const currentDate = new Date().toLocaleDateString('ja-JP');
 
@@ -413,93 +418,83 @@ export default function Home() {
           }
         });
 
-        // 印刷用のHTMLを作成
-        const printContent = `
-          <!DOCTYPE html>
-          <html lang="ja">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>手術前薬物中止判定</title>
-            <style>
-              body { font-family: 'MS Gothic', 'Yu Gothic', sans-serif; line-height: 1.8; padding: 25mm; }
-              .header, .footer, .section { margin-bottom: 20px; }
-              .center { text-align: center; }
-              h1 { font-size: 18pt; }
-              h2 { font-size: 14pt; }
-              p { margin: 0; font-size: 12pt; }
-              .drug-list { padding-left: 20px; }
-              .drug-item { margin-bottom: 10px; }
-              hr { border: none; border-top: 1px solid #ccc; margin: 20px 0; }
-              .no-print { display: none; }
-              .stop-date-value { color: #FF0000; font-weight: bold; text-decoration: underline; }
-              @media print {
-                .no-print { display: none; }
-              }
-            </style>
-          </head>
-          <body>
-            <div class="header center">
-              <h1>手術前の薬剤中止について</h1>
+        // Create a temporary div to render the HTML content
+        const tempDiv = document.createElement('div');
+        tempDiv.style.width = '210mm'; // A4 width
+        tempDiv.style.padding = '25mm'; // A4 margins
+        tempDiv.style.boxSizing = 'border-box';
+        tempDiv.style.fontFamily = 'MS Gothic, Yu Gothic, sans-serif';
+        tempDiv.style.lineHeight = '1.8';
+
+        const htmlContent = `
+            <div style="text-align: center;">
+              <h1 style="font-size: 18pt;">手術前の薬剤中止について</h1>
             </div>
 
-            <p>氏名：___________________様</p>
-            <p>手術予定日：${formattedSurgeryDate}</p>
+            <p style="margin: 0; font-size: 12pt;">氏名：___________________様</p>
+            <p style="margin: 0; font-size: 12pt;">手術予定日：${formattedSurgeryDate}</p>
 
-            <hr>
+            <hr style="border: none; border-top: 1px solid #ccc; margin: 20px 0;">
 
             ${drugsToStop.length > 0 ? `
-              <div class="section">
-                <h2>【休薬が必要な薬剤】</h2>
-                <p>以下の薬剤は、記載された休薬日より休薬が必要です。</p>
-                <div class="drug-list">
+              <div style="margin-bottom: 20px;">
+                <h2 style="font-size: 14pt;">【休薬が必要な薬剤】</h2>
+                <p style="margin: 0; font-size: 12pt;">以下の薬剤は、記載された休薬日より休薬が必要です。</p>
+                <div style="padding-left: 20px;">
                   ${drugsToStop.map((drug, index) => `
-                    <div class="drug-item">
-                      <p>${index + 1}. ${drug.name}</p>
-                      <p>　 休薬日：<span class="stop-date-value">${drug.stopDate}</span></p>
+                    <div style="margin-bottom: 10px;">
+                      <p style="margin: 0; font-size: 12pt;">${index + 1}. ${drug.name}</p>
+                      <p style="margin: 0; font-size: 12pt;">　 休薬日：<span style="color: #FF0000; font-weight: bold; text-decoration: underline;">${drug.stopDate}</span></p>
                     </div>
                   `).join('')}
                 </div>
               </div>
-              <hr>
+              <hr style="border: none; border-top: 1px solid #ccc; margin: 20px 0;">
             ` : ''}
 
             ${drugsToContinue.length > 0 ? `
-              <div class="section">
-                <h2>【休薬が不要な薬剤】</h2>
-                <p>以下の薬剤は術前の休薬は不要です。</p>
-                <div class="drug-list">
-                  ${drugsToContinue.map(drugName => `<p>${drugName}</p>`).join('')}
+              <div style="margin-bottom: 20px;">
+                <h2 style="font-size: 14pt;">【休薬が不要な薬剤】</h2>
+                <p style="margin: 0; font-size: 12pt;">以下の薬剤は術前の休薬は不要です。</p>
+                <div style="padding-left: 20px;">
+                  ${drugsToContinue.map(drugName => `<p style="margin: 0; font-size: 12pt;">${drugName}</p>`).join('')}
                 </div>
               </div>
-              <hr>
+              <hr style="border: none; border-top: 1px solid #ccc; margin: 20px 0;">
             ` : ''}
 
-            <div class="footer">
-              <p>休薬を忘れてしまうと、手術を受けられません。ご理解ならびにご協力の程、よろしくお願いいたします。</p>
+            <div style="margin-bottom: 20px;">
+              <p style="margin: 0; font-size: 12pt;">休薬を忘れてしまうと、手術を受けられません。ご理解ならびにご協力の程、よろしくお願いいたします。</p>
             </div>
-            
-            <button class="no-print" style="position: fixed; top: 20px; right: 20px; padding: 10px;" onclick="window.print()">印刷 / PDF保存</button>
-          </body>
-          </html>
         `;
+        tempDiv.innerHTML = htmlContent;
+        document.body.appendChild(tempDiv);
 
-        // 新しいウィンドウで印刷用HTMLを開く
-        const printWindow = window.open('', '_blank');
-        printWindow.document.write(printContent);
-        printWindow.document.close();
-        
-        // 印刷ダイアログを自動で開く（PDFとして保存可能）
-        setTimeout(() => {
-          printWindow.print();
-        }, 500);
-        
-        console.log('PDF印刷ダイアログを開きました');
+        const doc = new jsPDF({
+          unit: 'mm',
+          format: 'a4',
+          hotfixes: ['px_scaling'], // This might help with font rendering issues
+        });
+
+        // Use html2canvas to render the HTML to a canvas, then add to PDF
+        await doc.html(tempDiv, {
+          callback: function (doc) {
+            doc.save(`手術前薬物中止判定_${surgeryDate}_${currentDate.replace(/\//g, '')}.pdf`);
+            document.body.removeChild(tempDiv);
+          },
+          x: 0,
+          y: 0,
+          html2canvas: {
+            scale: 0.7, // Adjust scale for better fit on A4
+            width: 210, // A4 width in mm
+          },
+        });
+
+        console.log('PDFをダウンロードしました');
       } catch (error) {
         console.error('PDF作成エラー:', error);
-        alert('PDF作成に失敗しました。Word文書をダウンロードして、手動でPDFに変換してください。');
-        
-        // Word文書を自動ダウンロード
+        alert('PDF作成に失敗しました: ' + error.message);
+        // Fallback to Word download if PDF fails
         handleDownload();
       }
     }
