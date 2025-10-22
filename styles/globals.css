@@ -209,6 +209,15 @@ body {
   padding: 16px;
   border: 1px solid #e3eaf7;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  border-left-width: 5px;
+}
+
+.result-green {
+  border-left-color: #4CAF50;
+}
+
+.result-red {
+  border-left-color: #F44336;
 }
 .drug-name {
   color: #1976d2;

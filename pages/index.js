@@ -141,8 +141,9 @@ export default function Home() {
         const drugName = result.drug;
         const resultText = result.text || result.error || '結果が取得できませんでした';
         
+        const resultClass = resultText.includes('休薬の必要はありません') ? 'result-green' : 'result-red';
         return `
-          <div class="drug-result">
+          <div class="drug-result ${resultClass}">
             <h3 class="drug-name">${escapeHtml(drugName)}</h3>
             <div class="result-content">
               ${formatResultText(resultText)}
