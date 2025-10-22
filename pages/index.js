@@ -380,9 +380,9 @@ export default function Home() {
 
       try {
         const { jsPDF } = await import('jspdf');
-        // html2canvas is often a peer dependency for jspdf's html method
-        // If it's not automatically bundled, you might need to import it explicitly
-        // const html2canvas = await import('html2canvas');
+        const html2canvas = await import('html2canvas'); // Explicitly import html2canvas
+
+        console.log('jsPDF and html2canvas imported.');
 
         const surgeryDate = elements.surgeryDateInput.value;
         const currentDate = new Date().toLocaleDateString('ja-JP');
@@ -469,25 +469,29 @@ export default function Home() {
         `;
         tempDiv.innerHTML = htmlContent;
         document.body.appendChild(tempDiv);
+        console.log('HTML content rendered to tempDiv.');
 
         const doc = new jsPDF({
           unit: 'mm',
           format: 'a4',
-          hotfixes: ['px_scaling'], // This might help with font rendering issues
+          hotfixes: ['px_scaling'],
         });
+        console.log('jsPDF instance created.');
 
-        // Use html2canvas to render the HTML to a canvas, then add to PDF
         await doc.html(tempDiv, {
           callback: function (doc) {
             doc.save(`手術前薬物中止判定_${surgeryDate}_${currentDate.replace(/\//g, '')}.pdf`);
             document.body.removeChild(tempDiv);
+            console.log('PDF saved and tempDiv removed.');
           },
           x: 0,
           y: 0,
           html2canvas: {
             scale: 0.7, // Adjust scale for better fit on A4
             width: 210, // A4 width in mm
+            useCORS: true, // Important for images/external resources
           },
+          autoPaging: 'text', // Enable auto-paging for long content
         });
 
         console.log('PDFをダウンロードしました');
